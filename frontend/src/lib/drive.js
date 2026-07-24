@@ -13,12 +13,31 @@ let tokenClient = null;
 let accessToken = null;
 let tokenExpiry = 0;
 
-function ensureGis() {
-  if (!window.google || !window.google.accounts || !window.google.accounts.oauth2) {
-    throw new Error(
-      "Google Identity Services স্ক্রিপ্ট লোড হয়নি। ইন্টারনেট সংযোগ পরীক্ষা করুন।"
-    );
-  }
+function gisReady() {
+  return !!(window.google && window.google.accounts && window.google.accounts.oauth2);
+}
+
+// Waits for the Google Identity Services script (loaded async/defer in
+// index.html) to finish loading, polling briefly instead of assuming it's
+// already there.
+function waitForGis(timeoutMs = 5000) {
+  return new Promise((resolve, reject) => {
+    if (gisReady()) return resolve();
+    const start = Date.now();
+    const interval = setInterval(() => {
+      if (gisReady()) {
+        clearInterval(interval);
+        resolve();
+      } else if (Date.now() - start > timeoutMs) {
+        clearInterval(interval);
+        reject(
+          new Error(
+            "Google Identity Services স্ক্রিপ্ট লোড হয়নি। ইন্টারনেট সংযোগ পরীক্ষা করুন।"
+          )
+        );
+      }
+    }, 100);
+  });
 }
 
 export function isSignedIn() {
@@ -30,21 +49,36 @@ export function getAccessToken() {
 }
 
 // Attempts a silent (no popup) sign-in first; falls back to interactive.
-export function signIn({ interactive = true } = {}) {
-  ensureGis();
+export async function signIn({ interactive = true } = {}) {
+  await waitForGis();
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
   if (!clientId) {
-    return Promise.reject(
-      new Error("VITE_GOOGLE_CLIENT_ID সেট করা নেই। .env ফাইল দেখুন।")
-    );
+    throw new Error("VITE_GOOGLE_CLIENT_ID সেট করা নেই। .env ফাইল দেখুন।");
   }
 
   return new Promise((resolve, reject) => {
+    let settled = false;
+    // Some browsers silently drop the "prompt: none" callback entirely
+    // (e.g. third-party storage/cookie restrictions), so without a timeout
+    // the app would hang on "লোড হচ্ছে..." forever. Give it a few seconds,
+    // then fail so the UI can show the manual connect button instead.
+    const timer = !interactive
+      ? setTimeout(() => {
+          if (!settled) {
+            settled = true;
+            reject(new Error("silent_sign_in_timeout"));
+          }
+        }, 4000)
+      : null;
+
     tokenClient = window.google.accounts.oauth2.initTokenClient({
       client_id: clientId,
       scope: SCOPE,
       prompt: interactive ? "" : "none",
       callback: (resp) => {
+        if (settled) return;
+        settled = true;
+        if (timer) clearTimeout(timer);
         if (resp.error) {
           reject(new Error(resp.error));
           return;
