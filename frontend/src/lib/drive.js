@@ -13,30 +13,26 @@ let tokenClient = null;
 let accessToken = null;
 let tokenExpiry = 0;
 
-function gisReady() {
-  return !!(window.google && window.google.accounts && window.google.accounts.oauth2);
-}
-
-// Waits for the Google Identity Services script (loaded async/defer in
-// index.html) to finish loading, polling briefly instead of assuming it's
-// already there.
-function waitForGis(timeoutMs = 5000) {
+// The GIS <script> tag is loaded with async/defer, so it may not be ready
+// the instant the app mounts. Poll briefly instead of failing immediately.
+function waitForGis(timeoutMs = 8000) {
   return new Promise((resolve, reject) => {
-    if (gisReady()) return resolve();
     const start = Date.now();
-    const interval = setInterval(() => {
-      if (gisReady()) {
-        clearInterval(interval);
+    (function poll() {
+      if (window.google && window.google.accounts && window.google.accounts.oauth2) {
         resolve();
-      } else if (Date.now() - start > timeoutMs) {
-        clearInterval(interval);
+        return;
+      }
+      if (Date.now() - start > timeoutMs) {
         reject(
           new Error(
             "Google Identity Services স্ক্রিপ্ট লোড হয়নি। ইন্টারনেট সংযোগ পরীক্ষা করুন।"
           )
         );
+        return;
       }
-    }, 100);
+      setTimeout(poll, 100);
+    })();
   });
 }
 
@@ -58,17 +54,16 @@ export async function signIn({ interactive = true } = {}) {
 
   return new Promise((resolve, reject) => {
     let settled = false;
-    // Some browsers silently drop the "prompt: none" callback entirely
-    // (e.g. third-party storage/cookie restrictions), so without a timeout
-    // the app would hang on "লোড হচ্ছে..." forever. Give it a few seconds,
-    // then fail so the UI can show the manual connect button instead.
+    // Silent (prompt:"none") requests can, in some browsers, never invoke the
+    // callback at all when there's no existing Google session (e.g. blocked
+    // third-party cookies). Without this guard the caller's promise — and
+    // therefore the app's "loading" state — would hang forever.
     const timer = !interactive
       ? setTimeout(() => {
-          if (!settled) {
-            settled = true;
-            reject(new Error("silent_sign_in_timeout"));
-          }
-        }, 4000)
+          if (settled) return;
+          settled = true;
+          reject(new Error("silent sign-in timed out"));
+        }, 6000)
       : null;
 
     tokenClient = window.google.accounts.oauth2.initTokenClient({
