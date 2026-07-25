@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { Link } from "react-router-dom";
 import {
   BarChart,
   Bar,
@@ -33,6 +34,22 @@ export default function Stats() {
       .filter((c) => c.count > 0)
       .sort((a, b) => b.count - a.count);
   }, [books, categories]);
+
+  function groupBy(field) {
+    const map = new Map();
+    for (const b of books) {
+      const key = b[field];
+      if (!key) continue;
+      const entry = map.get(key) || { name: key, count: 0, value: 0 };
+      entry.count += 1;
+      entry.value += b.price || 0;
+      map.set(key, entry);
+    }
+    return [...map.values()].sort((a, b) => b.count - a.count);
+  }
+
+  const byAuthor = useMemo(() => groupBy("author"), [books]);
+  const byPublisher = useMemo(() => groupBy("publisher"), [books]);
 
   return (
     <div className="container">
@@ -92,6 +109,40 @@ export default function Stats() {
                 <Legend />
               </PieChart>
             </ResponsiveContainer>
+          </div>
+
+          <div className="chart-card">
+            <h3>লেখক অনুযায়ী বই</h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {byAuthor.map((a) => (
+                <Link
+                  key={a.name}
+                  to={`/browse/author/${encodeURIComponent(a.name)}`}
+                  className="sidebar-item"
+                  style={{ textDecoration: "none" }}
+                >
+                  <span>{a.name}</span>
+                  <span className="sidebar-count">{a.count}টি ({a.value}৳)</span>
+                </Link>
+              ))}
+            </div>
+          </div>
+
+          <div className="chart-card">
+            <h3>প্রকাশনী অনুযায়ী বই</h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {byPublisher.map((p) => (
+                <Link
+                  key={p.name}
+                  to={`/browse/publisher/${encodeURIComponent(p.name)}`}
+                  className="sidebar-item"
+                  style={{ textDecoration: "none" }}
+                >
+                  <span>{p.name}</span>
+                  <span className="sidebar-count">{p.count}টি ({p.value}৳)</span>
+                </Link>
+              ))}
+            </div>
           </div>
         </>
       )}
