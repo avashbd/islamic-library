@@ -18,7 +18,8 @@ function bnToEnNumber(str) {
       const idx = bnDigits.indexOf(ch);
       return idx === -1 ? ch : String(idx);
     })
-    .join("");
+    .join("")
+    .replace(/,/g, ""); // strip thousands-separator commas, e.g. "1,375" -> "1375"
   const match = converted.match(/[0-9]+(\.[0-9]+)?/);
   return match ? Number(match[0]) : null;
 }
@@ -92,14 +93,39 @@ async function scrapeWafilifeProduct(url) {
   const publisher = $("a[href*='/cat/books/publisher/']").first().text().trim() || null;
   const category = $("a[href*='/cat/books/subject/']").first().text().trim() || null;
 
-  // Price block, e.g. "১৯৫৳২৬০৳(২৫% ছাড়ে)"
-  const priceMatch = bodyText.match(/([০-৯]+)৳\s*([০-৯]+)৳\s*\(([০-৯]+)%/);
-  const price = priceMatch ? bnToEnNumber(priceMatch[1]) : null;
-  const originalPrice = priceMatch ? bnToEnNumber(priceMatch[2]) : price;
-  const discountPercent = priceMatch ? bnToEnNumber(priceMatch[3]) : null;
+  // Only search the MAIN product block for price/pages — the rest of the
+  // page (related-books / "আরো দেখুন" sidebar) contains other books' prices
+  // in the same ৳...৳...(..%) shape, and scanning the whole page could grab
+  // one of those by mistake instead of this book's own price.
+  const cutMarkers = ["আরো দেখুন", "রিভিউ এবং রেটিং", "গ্রাহক প্রশ্নোত্তর"];
+  let mainText = bodyText;
+  for (const marker of cutMarkers) {
+    const idx = mainText.indexOf(marker);
+    if (idx !== -1) mainText = mainText.slice(0, idx);
+  }
+
+  // Price block, e.g. "১,৩৭৫৳২,৭৫০৳(৫০% ছাড়ে)" — numbers may contain
+  // comma thousands-separators and/or a decimal point (e.g. "৫৭৭.৫০").
+  const bnNum = "[০-৯,]+(?:\\.[০-৯]+)?";
+  const priceMatch = mainText.match(
+    new RegExp(`(${bnNum})৳\\s*(${bnNum})৳\\s*\\(([০-৯]+)%`)
+  );
+  let price = priceMatch ? bnToEnNumber(priceMatch[1]) : null;
+  let originalPrice = priceMatch ? bnToEnNumber(priceMatch[2]) : price;
+  let discountPercent = priceMatch ? bnToEnNumber(priceMatch[3]) : null;
+
+  // Fallback: no discount shown, just a single price like "২২০৳"
+  if (price == null) {
+    const singleMatch = mainText.match(new RegExp(`(${bnNum})৳`));
+    if (singleMatch) {
+      price = bnToEnNumber(singleMatch[1]);
+      originalPrice = price;
+      discountPercent = null;
+    }
+  }
 
   // "পৃষ্ঠা : 176, কভার : পেপার ব্যাক, সংস্করণ : 1st Published, 2018, ভাষা : বাংলা"
-  const metaMatch = bodyText.match(
+  const metaMatch = mainText.match(
     /পৃষ্ঠা\s*:\s*([^,]+),\s*কভার\s*:\s*([^,]+),\s*সংস্করণ\s*:\s*([^,]+(?:,\s*[0-9]{4})?),\s*ভাষা\s*:\s*([^\s.।]+)/
   );
   const pages = metaMatch ? bnToEnNumber(metaMatch[1]) : null;
@@ -168,9 +194,10 @@ async function scrapeRokomariProduct(url) {
     $("a[href*='/category/']").first().text().trim() || null;
 
   // Try to find "Tk 195 Tk 260 (25% Off)" style or Bangla equivalent
+  const bnNum2 = "[০-৯0-9,]+(?:\\.[০-৯0-9]+)?";
   const priceMatch =
-    bodyText.match(/৳\s*([০-৯0-9]+)[^৳]*৳\s*([০-৯0-9]+)[^%]*\(?\s*([০-৯0-9]+)\s*%/) ||
-    bodyText.match(/Tk\.?\s*([0-9]+)[^T]*Tk\.?\s*([0-9]+)[^%]*\(?\s*([0-9]+)\s*%/i);
+    bodyText.match(new RegExp(`৳\\s*(${bnNum2})[^৳]*৳\\s*(${bnNum2})[^%]*\\(?\\s*([০-৯0-9]+)\\s*%`)) ||
+    bodyText.match(new RegExp(`Tk\\.?\\s*(${bnNum2})[^T]*Tk\\.?\\s*(${bnNum2})[^%]*\\(?\\s*([0-9]+)\\s*%`, "i"));
   const price = priceMatch ? bnToEnNumber(priceMatch[1]) : null;
   const originalPrice = priceMatch ? bnToEnNumber(priceMatch[2]) : price;
   const discountPercent = priceMatch ? bnToEnNumber(priceMatch[3]) : null;
