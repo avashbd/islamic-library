@@ -15,6 +15,9 @@ export default function Header() {
           <NavLink to="/add" className={({ isActive }) => (isActive ? "active" : "")}>
             বই যোগ করুন
           </NavLink>
+          <NavLink to="/bulk-add" className={({ isActive }) => (isActive ? "active" : "")}>
+            একসাথে অনেক বই যোগ করুন
+          </NavLink>
           <NavLink to="/stats" className={({ isActive }) => (isActive ? "active" : "")}>
             পরিসংখ্যান
           </NavLink>
