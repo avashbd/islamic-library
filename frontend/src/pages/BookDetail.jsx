@@ -1,4 +1,4 @@
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import { useState } from "react";
 import { useLibrary } from "../context/LibraryContext";
 
@@ -33,13 +33,34 @@ export default function BookDetail() {
           <div style={{ flex: 1, minWidth: 220 }}>
             {!editing ? (
               <>
-                {book.category && <span className="badge">{book.category}</span>}
+                {book.category && (
+                  <Link to={`/browse/category/${encodeURIComponent(book.category)}`} className="badge">
+                    {book.category}
+                  </Link>
+                )}
                 <h2 style={{ margin: "8px 0 4px" }}>{book.title}</h2>
-                {book.author && <div className="book-card-author">লেখক: {book.author}</div>}
-                {book.publisher && <div className="book-card-author">প্রকাশনী: {book.publisher}</div>}
+                {book.author && (
+                  <div className="book-card-author">
+                    লেখক:{" "}
+                    <Link to={`/browse/author/${encodeURIComponent(book.author)}`}>
+                      {book.author}
+                    </Link>
+                  </div>
+                )}
+                {book.publisher && (
+                  <div className="book-card-author">
+                    প্রকাশনী:{" "}
+                    <Link to={`/browse/publisher/${encodeURIComponent(book.publisher)}`}>
+                      {book.publisher}
+                    </Link>
+                  </div>
+                )}
                 {book.pages && <div className="book-card-author">পৃষ্ঠা: {book.pages}</div>}
                 {book.shelfNumber && (
                   <div className="book-card-author">শেলফ: {book.shelfNumber}</div>
+                )}
+                {book.volumeCount && (
+                  <div className="book-card-author">খণ্ড/পিস: {book.volumeCount}</div>
                 )}
                 <div className="book-card-price" style={{ fontSize: 20, marginTop: 10 }}>
                   {book.price != null ? `${book.price}৳` : "দাম যোগ করা হয়নি"}
@@ -114,6 +135,14 @@ export default function BookDetail() {
                     placeholder="যেমন: শেলফ ৩, সারি ২"
                     value={form.shelfNumber || ""}
                     onChange={(e) => update("shelfNumber", e.target.value)}
+                  />
+                </div>
+                <div className="form-row">
+                  <label>কয় খণ্ড/পিস</label>
+                  <input
+                    placeholder="যেমন: ৩"
+                    value={form.volumeCount || ""}
+                    onChange={(e) => update("volumeCount", e.target.value)}
                   />
                 </div>
                 <div className="form-row">
