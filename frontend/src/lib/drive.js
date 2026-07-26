@@ -3,37 +3,33 @@
 // the app's hidden "appDataFolder" (invisible in the user's normal Drive UI,
 // accessible only to this app).
 //
-// Requires a Google Cloud OAuth Client ID (see README) set as
-// VITE_GOOGLE_CLIENT_ID in your .env file.
+// Auth uses the OAuth "authorization code" flow (not the old implicit token
+// flow) so that on first login we get a refresh_token, which is stored in
+// this browser's localStorage. On every later reload we silently trade that
+// refresh_token for a fresh access_token via the backend — no Google popup,
+// no re-login needed on this device.
+//
+// Requires VITE_GOOGLE_CLIENT_ID and VITE_API_BASE_URL in your .env file.
 
 const DATA_FILENAME = "islamic-library-data.json";
 const SCOPE = "https://www.googleapis.com/auth/drive.appdata";
+const REFRESH_TOKEN_KEY = "islamic_library_gdrive_refresh_token";
 
-let tokenClient = null;
 let accessToken = null;
 let tokenExpiry = 0;
 
-// The GIS <script> tag is loaded with async/defer, so it may not be ready
-// the instant the app mounts. Poll briefly instead of failing immediately.
-function waitForGis(timeoutMs = 8000) {
-  return new Promise((resolve, reject) => {
-    const start = Date.now();
-    (function poll() {
-      if (window.google && window.google.accounts && window.google.accounts.oauth2) {
-        resolve();
-        return;
-      }
-      if (Date.now() - start > timeoutMs) {
-        reject(
-          new Error(
-            "Google Identity Services স্ক্রিপ্ট লোড হয়নি। ইন্টারনেট সংযোগ পরীক্ষা করুন।"
-          )
-        );
-        return;
-      }
-      setTimeout(poll, 100);
-    })();
-  });
+function apiBase() {
+  const base = import.meta.env.VITE_API_BASE_URL;
+  if (!base) throw new Error("VITE_API_BASE_URL সেট করা নেই। .env ফাইল দেখুন।");
+  return base;
+}
+
+function ensureGis() {
+  if (!window.google || !window.google.accounts || !window.google.accounts.oauth2) {
+    throw new Error(
+      "Google Identity Services স্ক্রিপ্ট লোড হয়নি। ইন্টারনেট সংযোগ পরীক্ষা করুন।"
+    );
+  }
 }
 
 export function isSignedIn() {
@@ -44,55 +40,95 @@ export function getAccessToken() {
   return accessToken;
 }
 
-// Attempts a silent (no popup) sign-in first; falls back to interactive.
-export async function signIn({ interactive = true } = {}) {
-  await waitForGis();
+export function getStoredRefreshToken() {
+  try {
+    return localStorage.getItem(REFRESH_TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function storeRefreshToken(token) {
+  try {
+    if (token) localStorage.setItem(REFRESH_TOKEN_KEY, token);
+  } catch {
+    // ignore storage errors (private browsing etc.)
+  }
+}
+
+async function exchangeWithBackend(payload) {
+  const res = await fetch(`${apiBase()}/api/google-auth`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || "Google লগইন যাচাই ব্যর্থ হয়েছে");
+  return json;
+}
+
+function applyTokenResponse(data) {
+  accessToken = data.access_token;
+  tokenExpiry = Date.now() + (data.expires_in - 60) * 1000;
+  if (data.refresh_token) storeRefreshToken(data.refresh_token);
+}
+
+// interactive=true  -> shows the Google account picker/consent popup (first
+//                      login, or if the stored refresh_token has expired).
+// interactive=false -> silent: uses the refresh_token stored on this device.
+//                      Throws if none is stored (caller should then show the
+//                      "Admin Login" button instead of the whole app).
+export function signIn({ interactive = true } = {}) {
+  if (!interactive) {
+    const stored = getStoredRefreshToken();
+    if (!stored) return Promise.reject(new Error("no stored refresh token"));
+    return exchangeWithBackend({ refresh_token: stored }).then((data) => {
+      applyTokenResponse(data);
+      return accessToken;
+    });
+  }
+
+  ensureGis();
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
   if (!clientId) {
-    throw new Error("VITE_GOOGLE_CLIENT_ID সেট করা নেই। .env ফাইল দেখুন।");
+    return Promise.reject(new Error("VITE_GOOGLE_CLIENT_ID সেট করা নেই। .env ফাইল দেখুন।"));
   }
 
   return new Promise((resolve, reject) => {
-    let settled = false;
-    // Silent (prompt:"none") requests can, in some browsers, never invoke the
-    // callback at all when there's no existing Google session (e.g. blocked
-    // third-party cookies). Without this guard the caller's promise — and
-    // therefore the app's "loading" state — would hang forever.
-    const timer = !interactive
-      ? setTimeout(() => {
-          if (settled) return;
-          settled = true;
-          reject(new Error("silent sign-in timed out"));
-        }, 6000)
-      : null;
-
-    tokenClient = window.google.accounts.oauth2.initTokenClient({
+    const codeClient = window.google.accounts.oauth2.initCodeClient({
       client_id: clientId,
       scope: SCOPE,
-      prompt: interactive ? "" : "none",
-      callback: (resp) => {
-        if (settled) return;
-        settled = true;
-        if (timer) clearTimeout(timer);
+      ux_mode: "popup",
+      // access_type/prompt=consent force Google to issue a refresh_token
+      // (it's only returned the first time otherwise).
+      access_type: "offline",
+      prompt: "consent",
+      callback: async (resp) => {
         if (resp.error) {
           reject(new Error(resp.error));
           return;
         }
-        accessToken = resp.access_token;
-        tokenExpiry = Date.now() + (resp.expires_in - 60) * 1000;
-        resolve(accessToken);
+        try {
+          const data = await exchangeWithBackend({ code: resp.code });
+          applyTokenResponse(data);
+          resolve({ accessToken, refreshTokenIssued: !!data.refresh_token });
+        } catch (e) {
+          reject(e);
+        }
       },
     });
-    tokenClient.requestAccessToken({ prompt: interactive ? "" : "none" });
+    codeClient.requestCode();
   });
 }
 
 export function signOut() {
-  if (accessToken && window.google?.accounts?.oauth2?.revoke) {
-    window.google.accounts.oauth2.revoke(accessToken, () => {});
-  }
   accessToken = null;
   tokenExpiry = 0;
+  try {
+    localStorage.removeItem(REFRESH_TOKEN_KEY);
+  } catch {
+    // ignore
+  }
 }
 
 async function driveFetch(url, options = {}) {
