@@ -2,60 +2,51 @@ import { useState } from "react";
 import { useLibrary } from "../context/LibraryContext";
 
 export default function Settings() {
-  const { changePassword, driveConnected } = useLibrary();
+  const { isAdmin, adminLogin, changePassword } = useLibrary();
   const [oldPass, setOldPass] = useState("");
   const [newPass, setNewPass] = useState("");
-  const [confirmPass, setConfirmPass] = useState("");
-  const [msg, setMsg] = useState("");
+  const [message, setMessage] = useState("");
 
-  async function handleChange(e) {
+  if (!isAdmin) {
+    return (
+      <div className="container">
+        <div className="empty-state">
+          এই পেজ শুধু অ্যাডমিনের জন্য।
+          <div style={{ marginTop: 12 }}>
+            <button className="btn-primary" onClick={adminLogin}>অ্যাডমিন লগইন করুন</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const handlePasswordChange = async (e) => {
     e.preventDefault();
-    setMsg("");
-    if (newPass.length < 4) return setMsg("নতুন পাসওয়ার্ড অন্তত ৪ অক্ষরের হতে হবে");
-    if (newPass !== confirmPass) return setMsg("নতুন পাসওয়ার্ড দুইবার একই লিখুন");
     try {
       await changePassword(oldPass, newPass);
-      setMsg("পাসওয়ার্ড পরিবর্তন হয়েছে ✅");
+      setMessage("পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে!");
       setOldPass("");
       setNewPass("");
-      setConfirmPass("");
     } catch (err) {
-      setMsg(err.message);
+      setMessage(err.message || "পাসওয়ার্ড পরিবর্তন ব্যর্থ হয়েছে।");
     }
-  }
+  };
 
   return (
     <div className="container">
       <div className="form-card">
         <h2>সেটিংস</h2>
-
-        <div className="form-row">
-          <label>Google Drive স্ট্যাটাস</label>
-          <div>{driveConnected ? "✅ সংযুক্ত আছে" : "❌ সংযুক্ত নয়"}</div>
-        </div>
-
-        <form onSubmit={handleChange}>
-          <h3 style={{ marginBottom: 10 }}>পাসওয়ার্ড পরিবর্তন করুন</h3>
+        <form onSubmit={handlePasswordChange}>
           <div className="form-row">
-            <label>পুরনো পাসওয়ার্ড</label>
-            <input type="password" value={oldPass} onChange={(e) => setOldPass(e.target.value)} />
+            <label>বর্তমান পাসওয়ার্ড (ডিফল্ট: Avash)</label>
+            <input type="password" value={oldPass} onChange={(e) => setOldPass(e.target.value)} required />
           </div>
           <div className="form-row">
-            <label>নতুন পাসওয়ার্ড</label>
-            <input type="password" value={newPass} onChange={(e) => setNewPass(e.target.value)} />
+            <label>নতুন পাসওয়ার্ড</label>
+            <input type="password" value={newPass} onChange={(e) => setNewPass(e.target.value)} required />
           </div>
-          <div className="form-row">
-            <label>নতুন পাসওয়ার্ড আবার লিখুন</label>
-            <input
-              type="password"
-              value={confirmPass}
-              onChange={(e) => setConfirmPass(e.target.value)}
-            />
-          </div>
-          {msg && <div className="banglish-preview">{msg}</div>}
-          <button className="btn-primary" type="submit">
-            পরিবর্তন করুন
-          </button>
+          {message && <p style={{ color: message.includes("সফল") ? "green" : "red" }}>{message}</p>}
+          <button type="submit" className="btn-primary">পাসওয়ার্ড আপডেট করুন</button>
         </form>
       </div>
     </div>
