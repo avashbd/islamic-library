@@ -9,7 +9,7 @@ export default function Header() {
     <header className="app-header">
       <div className="container app-header-inner">
         <div className="brand">
-          <img src="/logo.png" alt="" style={{ width: 32, height: 32, borderRadius: 6, objectFit: "cover" }} />
+          <img src={`${import.meta.env.BASE_URL}logo.png`} alt="" style={{ width: 32, height: 32, borderRadius: 6, objectFit: "cover" }} />
           আল্লাহর বান্দা আভাসের লাইব্রেরি
         </div>
         <nav className="header-nav">
