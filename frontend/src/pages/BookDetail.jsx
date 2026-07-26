@@ -1,40 +1,173 @@
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
+import { useState } from "react";
 import { useLibrary } from "../context/LibraryContext";
 
 export default function BookDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { books, isAdmin, deleteBook } = useLibrary();
+  const { books, categories, updateBook, deleteBook, isAdmin } = useLibrary();
+  const book = books.find((b) => b.id === id);
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState(book || {});
 
-  const book = books.find(b => b.id === id);
+  if (!book) {
+    return (
+      <div className="container">
+        <div className="empty-state">বইটি পাওয়া যায়নি।</div>
+      </div>
+    );
+  }
 
-  if (!book) return <div className="container">বইটি পাওয়া যায়নি!</div>;
-
-  const handleDelete = () => {
-    if (window.confirm("আপনি কি নিশ্চিত যে এই বইটি মুছে ফেলতে চান?")) {
-      deleteBook(id);
-      navigate("/");
-    }
-  };
+  const update = (key, val) => setForm((f) => ({ ...f, [key]: val }));
 
   return (
     <div className="container">
-      <div className="form-card" style={{ display: "flex", gap: "20px" }}>
-        {book.cover && <img src={book.cover} alt={book.title} style={{ width: "150px", objectFit: "cover" }} />}
-        <div>
-          <h2>{book.title}</h2>
-          <p><strong>লেখক:</strong> {book.author}</p>
-          <p><strong>প্রকাশনী:</strong> {book.publisher}</p>
-          <p><strong>ক্যাটাগরি:</strong> {book.category}</p>
-          {book.price && <p><strong>দাম:</strong> ৳{book.price}</p>}
-          
-          {/* Admin Controls */}
-          {isAdmin && (
-            <div style={{ marginTop: "20px", display: "flex", gap: "10px" }}>
-              <button className="btn-secondary" onClick={() => alert("এডিট ফিচারটি পরে যোগ করা হবে!")}>সম্পাদনা করুন</button>
-              <button className="btn-outline-danger" onClick={handleDelete}>মুছে ফেলুন</button>
-            </div>
-          )}
+      <div className="form-card">
+        <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
+          <img
+            className="cover-preview"
+            style={{ width: 140, height: 200 }}
+            src={book.cover || "https://placehold.co/300x440/f0ece7/746a63?text=No+Cover"}
+            alt={book.title}
+          />
+          <div style={{ flex: 1, minWidth: 220 }}>
+            {!editing ? (
+              <>
+                {book.category && (
+                  <Link to={`/browse/category/${encodeURIComponent(book.category)}`} className="badge">
+                    {book.category}
+                  </Link>
+                )}
+                <h2 style={{ margin: "8px 0 4px" }}>{book.title}</h2>
+                {book.author && (
+                  <div className="book-card-author">
+                    লেখক:{" "}
+                    <Link to={`/browse/author/${encodeURIComponent(book.author)}`}>
+                      {book.author}
+                    </Link>
+                  </div>
+                )}
+                {book.publisher && (
+                  <div className="book-card-author">
+                    প্রকাশনী:{" "}
+                    <Link to={`/browse/publisher/${encodeURIComponent(book.publisher)}`}>
+                      {book.publisher}
+                    </Link>
+                  </div>
+                )}
+                {book.pages && <div className="book-card-author">পৃষ্ঠা: {book.pages}</div>}
+                {book.shelfNumber && (
+                  <div className="book-card-author">শেলফ: {book.shelfNumber}</div>
+                )}
+                {book.volumeCount && (
+                  <div className="book-card-author">খণ্ড/পিস: {book.volumeCount}</div>
+                )}
+                <div className="book-card-price" style={{ fontSize: 20, marginTop: 10 }}>
+                  {book.price != null ? `${book.price}৳` : "দাম যোগ করা হয়নি"}
+                  {book.originalPrice && book.originalPrice !== book.price && (
+                    <span className="original">{book.originalPrice}৳</span>
+                  )}
+                </div>
+                {isAdmin && (
+                  <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
+                    <button className="btn-secondary" onClick={() => setEditing(true)}>
+                      সম্পাদনা করুন
+                    </button>
+                    <button
+                      className="btn-outline-danger"
+                      onClick={() => {
+                        if (confirm("এই বইটি মুছে ফেলতে চান?")) {
+                          deleteBook(book.id);
+                          navigate("/");
+                        }
+                      }}
+                    >
+                      মুছে ফেলুন
+                    </button>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="form-row">
+                  <label>নাম</label>
+                  <input value={form.title} onChange={(e) => update("title", e.target.value)} />
+                </div>
+                <div className="two-col">
+                  <div className="form-row">
+                    <label>লেখক</label>
+                    <input value={form.author || ""} onChange={(e) => update("author", e.target.value)} />
+                  </div>
+                  <div className="form-row">
+                    <label>প্রকাশনী</label>
+                    <input value={form.publisher || ""} onChange={(e) => update("publisher", e.target.value)} />
+                  </div>
+                </div>
+                <div className="form-row">
+                  <label>ক্যাটাগরি</label>
+                  <select value={form.category || ""} onChange={(e) => update("category", e.target.value)}>
+                    {categories.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="two-col">
+                  <div className="form-row">
+                    <label>দাম</label>
+                    <input
+                      type="number"
+                      value={form.price ?? ""}
+                      onChange={(e) => update("price", Number(e.target.value))}
+                    />
+                  </div>
+                  <div className="form-row">
+                    <label>পৃষ্ঠা</label>
+                    <input
+                      type="number"
+                      value={form.pages ?? ""}
+                      onChange={(e) => update("pages", Number(e.target.value))}
+                    />
+                  </div>
+                </div>
+                <div className="form-row">
+                  <label>বুকশেলফ নম্বর</label>
+                  <input
+                    placeholder="যেমন: শেলফ ৩, সারি ২"
+                    value={form.shelfNumber || ""}
+                    onChange={(e) => update("shelfNumber", e.target.value)}
+                  />
+                </div>
+                <div className="form-row">
+                  <label>কয় খণ্ড/পিস</label>
+                  <input
+                    placeholder="যেমন: ৩"
+                    value={form.volumeCount || ""}
+                    onChange={(e) => update("volumeCount", e.target.value)}
+                  />
+                </div>
+                <div className="form-row">
+                  <label>কভার URL</label>
+                  <input value={form.cover || ""} onChange={(e) => update("cover", e.target.value)} />
+                </div>
+                <div style={{ display: "flex", gap: 10 }}>
+                  <button
+                    className="btn-primary"
+                    onClick={() => {
+                      updateBook(book.id, form);
+                      setEditing(false);
+                    }}
+                  >
+                    সংরক্ষণ করুন
+                  </button>
+                  <button className="btn-secondary" onClick={() => setEditing(false)}>
+                    বাতিল
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </div>
