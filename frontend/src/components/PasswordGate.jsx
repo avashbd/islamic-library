@@ -1,21 +1,17 @@
 import { useState } from "react";
 import { useLibrary } from "../context/LibraryContext";
 
+// Simple shared "view password" gate — this is for ALL visitors (dorshonarthi
+// as well as the admin). It is NOT Google login; that's a separate, later
+// step (see the "অ্যাডমিন লগইন" button in the Header) that unlocks add/
+// edit/delete controls. Default password is "Avash", changeable from
+// Settings by the admin.
 export default function PasswordGate({ children }) {
-  const {
-    driveConnected,
-    driveError,
-    loading,
-    connectDrive,
-    passwordHash,
-    unlocked,
-    setNewPassword,
-    tryUnlock,
-  } = useLibrary();
+  const { loading, unlocked, tryUnlock } = useLibrary();
 
   const [input, setInput] = useState("");
-  const [confirm, setConfirm] = useState("");
   const [error, setError] = useState("");
+  const [checking, setChecking] = useState(false);
 
   if (loading) {
     return (
@@ -25,93 +21,33 @@ export default function PasswordGate({ children }) {
     );
   }
 
-  if (!driveConnected) {
-    return (
-      <div className="gate-wrap">
-        <div className="gate-card">
-          <h2>আমার লাইব্রেরি</h2>
-          <p style={{ color: "var(--color-text-muted)", fontSize: 14 }}>
-            আপনার বইয়ের ডেটা Google Drive এ সংরক্ষিত থাকে। শুরু করতে আপনার Google
-            অ্যাকাউন্টের সাথে সংযুক্ত করুন।
-          </p>
-          {driveError && <div className="error-text">{driveError}</div>}
-          <button className="btn-primary" style={{ width: "100%" }} onClick={connectDrive}>
-            Google Drive এর সাথে সংযুক্ত করুন
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   if (unlocked) return children;
 
-  // First-time setup: no password stored yet
-  if (!passwordHash) {
-    return (
-      <div className="gate-wrap">
-        <div className="gate-card">
-          <h2>একটি পাসওয়ার্ড সেট করুন</h2>
-          <p style={{ color: "var(--color-text-muted)", fontSize: 14 }}>
-            এই পাসওয়ার্ড দিয়েই পরবর্তীতে লাইব্রেরিতে ঢুকতে হবে।
-          </p>
-          <input
-            type="password"
-            placeholder="নতুন পাসওয়ার্ড"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-          />
-          <input
-            type="password"
-            placeholder="আবার লিখুন"
-            value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
-          />
-          {error && <div className="error-text">{error}</div>}
-          <button
-            className="btn-primary"
-            style={{ width: "100%" }}
-            onClick={() => {
-              if (input.length < 4) return setError("অন্তত ৪ অক্ষরের পাসওয়ার্ড দিন");
-              if (input !== confirm) return setError("পাসওয়ার্ড মিলছে না");
-              setError("");
-              setNewPassword(input);
-            }}
-          >
-            সেট করুন ও প্রবেশ করুন
-          </button>
-        </div>
-      </div>
-    );
+  async function handleSubmit() {
+    setChecking(true);
+    const ok = await tryUnlock(input);
+    setChecking(false);
+    if (!ok) setError("পাসওয়ার্ড সঠিক নয়");
   }
 
-  // Returning user: ask for password
   return (
     <div className="gate-wrap">
       <div className="gate-card">
+        <img src="/logo.png" alt="আভাস লাইব্রেরি" style={{ width: 96, margin: "0 auto 12px", display: "block" }} />
         <h2>পাসওয়ার্ড দিন</h2>
         <input
           type="password"
           placeholder="পাসওয়ার্ড"
           value={input}
           autoFocus
-          onKeyDown={async (e) => {
-            if (e.key === "Enter") {
-              const ok = await tryUnlock(input);
-              if (!ok) setError("পাসওয়ার্ড সঠিক নয়");
-            }
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleSubmit();
           }}
           onChange={(e) => setInput(e.target.value)}
         />
         {error && <div className="error-text">{error}</div>}
-        <button
-          className="btn-primary"
-          style={{ width: "100%" }}
-          onClick={async () => {
-            const ok = await tryUnlock(input);
-            if (!ok) setError("পাসওয়ার্ড সঠিক নয়");
-          }}
-        >
-          প্রবেশ করুন
+        <button className="btn-primary" style={{ width: "100%" }} disabled={checking} onClick={handleSubmit}>
+          {checking ? "যাচাই করা হচ্ছে…" : "প্রবেশ করুন"}
         </button>
       </div>
     </div>
