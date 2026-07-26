@@ -16,10 +16,11 @@ const emptyForm = {
   sourceSite: null,
   sourceUrl: "",
   shelfNumber: "",
+  volumeCount: "",
 };
 
 export default function AddBook() {
-  const { addBook, categories, addCategory } = useLibrary();
+  const { addBook, categories, addCategory, isAdmin, adminLogin, findDuplicate } = useLibrary();
   const navigate = useNavigate();
 
   const [form, setForm] = useState(emptyForm);
@@ -114,6 +115,17 @@ export default function AddBook() {
   function handleSubmit(e) {
     e.preventDefault();
     if (!titleBangla.trim()) return;
+
+    const dup = findDuplicate({ title: titleBangla.trim(), sourceUrl: form.sourceUrl || null });
+    if (dup) {
+      const proceed = confirm(
+        `এই বইটি ("${dup.title}") আগে থেকেই লাইব্রেরিতে আছে${
+          dup.shelfNumber ? ` (শেলফ: ${dup.shelfNumber})` : ""
+        }।\n\nতবুও যোগ করতে চান? "বাতিল" চাপলে যোগ হবে না।`
+      );
+      if (!proceed) return;
+    }
+
     addBook({
       title: titleBangla.trim(),
       author: form.author.trim(),
@@ -125,8 +137,24 @@ export default function AddBook() {
       cover: form.cover || null,
       sourceUrl: form.sourceUrl || null,
       shelfNumber: form.shelfNumber.trim() || null,
+      volumeCount: form.volumeCount.toString().trim() || null,
     });
     navigate("/");
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="container">
+        <div className="empty-state">
+          এই পেজ শুধু অ্যাডমিনের জন্য।
+          <div style={{ marginTop: 12 }}>
+            <button className="btn-primary" onClick={adminLogin}>
+              অ্যাডমিন লগইন করুন
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -270,6 +298,14 @@ export default function AddBook() {
               placeholder="যেমন: শেলফ ৩, সারি ২"
               value={form.shelfNumber}
               onChange={(e) => update("shelfNumber", e.target.value)}
+            />
+          </div>
+          <div className="form-row">
+            <label>কয় খণ্ড/পিস</label>
+            <input
+              placeholder="যেমন: ৩ (৩ খণ্ড/পিস একসাথে)"
+              value={form.volumeCount}
+              onChange={(e) => update("volumeCount", e.target.value)}
             />
           </div>
         </div>
