@@ -33,7 +33,7 @@ export default function PasswordGate({ children }) {
   return (
     <div className="gate-wrap">
       <div className="gate-card">
-        <img src="/logo.png" alt="আভাস লাইব্রেরি" style={{ width: 96, margin: "0 auto 12px", display: "block" }} />
+        <img src={`${import.meta.env.BASE_URL}logo.png`} alt="আভাস লাইব্রেরি" style={{ width: 96, margin: "0 auto 12px", display: "block" }} />
         <h2>পাসওয়ার্ড দিন</h2>
         <input
           type="password"
